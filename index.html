@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PushTime — Resolume Timer</title>
+<style>
+  :root {
+    --bg: #0e0f13; --panel: #181a21; --panel2: #1f222b; --line: #2a2e3a;
+    --text: #e7e9ee; --muted: #8b90a0; --accent: #F2701F; --good: #3ddc84;
+    --bad: #ff5d5d; --warn: #ffce4a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 24px;
+  }
+  .app { width: 100%; max-width: 720px; }
+  h1 { font-size: 18px; margin: 0 0 2px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field.grow { flex: 1; min-width: 120px; }
+  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  input, select {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 9px 10px; font-size: 14px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input.osc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+  button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 9px 14px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #2a1505; font-weight: 600; }
+  button.warn { background: transparent; border-color: var(--line); }
+  .chips { display: flex; gap: 6px; }
+  .chips button { padding: 6px 10px; font-size: 12px; }
+  .preview {
+    text-align: center; padding: 26px 10px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px;
+  }
+  .preview .time { font-size: 60px; font-weight: 700; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+  .preview .meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .controls { display: flex; gap: 10px; }
+  .controls button { flex: 1; padding: 14px; font-size: 15px; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.good { background: var(--good); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .num { width: 70px; }
+  .hide { display: none; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+  .brand .logo { width: 56px; height: 56px; flex: none; }
+  .brand .word { font-size: 30px; font-weight: 700; letter-spacing: -.01em; line-height: 1; }
+  .brand .tag { color: var(--muted); font-size: 12px; margin-top: 5px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PushTime">
+      <!-- stopwatch tick ring -->
+      <circle cx="60" cy="62" r="40" fill="none" stroke="#F2701F" stroke-width="7"
+              stroke-linecap="round" stroke-dasharray="0.5 13" transform="rotate(-6 60 62)"/>
+      <!-- rising chart line -->
+      <path d="M30 84 L50 62 L64 74 L86 46" fill="none" stroke="#F2701F"
+            stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- arrowhead -->
+      <path d="M72 40 L97 31 L90 58 Z" fill="#F2701F"/>
+    </svg>
+    <div>
+      <div class="word">PushTime</div>
+      <div class="tag">Resolume Timer via REST API</div>
+    </div>
+  </div>
+
+  <div class="preview">
+    <div class="time" id="preview">--:--</div>
+    <div class="meta" id="previewMeta">idle</div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button class="warn" id="resetBtn">Reset</button>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <div class="row">
+      <div class="field grow">
+        <label>Mode</label>
+        <select id="mode">
+          <option value="countdown">Countdown</option>
+          <option value="countup">Count up (elapsed)</option>
+          <option value="clock">Time of day</option>
+          <option value="target">Countdown to clock time</option>
+        </select>
+      </div>
+      <div class="field grow" id="durWrap">
+        <label>Duration (mm:ss or seconds)</label>
+        <input id="duration" value="05:00">
+      </div>
+      <div class="field grow hide" id="targetWrap">
+        <label>Target time (HH:MM)</label>
+        <input id="targetTime" value="20:00">
+      </div>
+    </div>
+    <div class="chips" style="margin-top:10px" id="quick">
+      <button data-s="60">1:00</button>
+      <button data-s="300">5:00</button>
+      <button data-s="600">10:00</button>
+      <button data-s="900">15:00</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field">
+        <label>Hours</label>
+        <select id="hours"><option value="auto">Auto</option><option value="always">Always show</option></select>
+      </div>
+      <div class="field">
+        <label>Decimals</label>
+        <select id="decimals">
+          <option value="0">None</option>
+          <option value="1">Tenths .t</option>
+          <option value="2">Hundredths .cc</option>
+          <option value="3">Milliseconds .mmm</option>
+        </select>
+      </div>
+      <div class="field grow">
+        <label>Prefix (optional)</label>
+        <input id="prefix" placeholder="e.g. STARTS IN ">
+      </div>
+      <div class="field grow">
+        <label>Text at zero</label>
+        <input id="doneText" value="TIME'S UP">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row">
+      <div class="field"><label>Host</label><input id="host" value="localhost" size="12"></div>
+      <div class="field"><label>Port</label><input id="port" class="num" value="8080"></div>
+      <div class="field"><label>Text on</label><select id="targetType"><option value="clip">Clip</option><option value="layer">Layer</option></select></div>
+      <div class="field"><label>Layer</label><input id="layer" class="num" value="3"></div>
+      <div class="field" id="clipWrap"><label>Clip</label><input id="clip" class="num" value="4"></div>
+      <div class="field"><label>&nbsp;</label><button id="resolveBtn">Resolve</button></div>
+      <div class="field"><label>&nbsp;</label><button id="testBtn">Test</button></div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div class="field grow">
+        <label>Text parameter (source or effect)</label>
+        <select id="param"></select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div class="field grow">
+        <label>OSC address (for other tools)</label>
+        <input id="oscAddr" class="osc" readonly>
+      </div>
+      <div class="field"><label>&nbsp;</label><button id="copyOscBtn">Copy OSC</button></div>
+    </div>
+
+    <div class="status" style="margin-top:12px"><span class="dot" id="dot"></span><span id="statusMsg">Pick a target and hit Resolve</span></div>
+    <div class="hint">
+      Works whether the text is a Text Block / Text Animator <em>source</em> on a clip, or added as an
+      <em>effect</em> on a clip or a layer. Resolve scans the target and lists every text parameter it finds;
+      pick the one you want to drive. The OSC address is only auto-built for a clip <em>source</em> (verified
+      format); for effects use Arena's OSC Shortcut mode.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <label style="font-size:13px;text-transform:none;letter-spacing:0;color:var(--text)">
+        <input type="checkbox" id="listen" style="vertical-align:-2px"> Follow the clip's play state (connect = start, disconnect = stop &amp; reset)
+      </label>
+      <span class="status"><span class="dot" id="trigDot"></span><span id="trigMsg">off</span></span>
+    </div>
+    <div class="hint">
+      Listens over Arena's WebSocket (same host, port 8080) for the target clip. Connecting it starts the timer;
+      disconnecting it stops and resets. Only available when the target is a clip. Mode, duration and pause stay here.
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  let running = false, paused = false;
+  let elapsed = 0;          // accumulated running seconds (countdown/countup)
+  let lastTick = null;
+  let lastSent = null;      // last string actually pushed
+  let lastSendAt = 0;       // throttle clock for sub-second updates
+  let durationSec = 300;
+  let resolvedId = null;    // chosen Text param id
+  let resolvedKey = '';     // identity the param list was built for
+  let textParams = {};      // id -> {kind, label, paramName}
+
+  function parseDuration(str) {
+    str = (str || '').trim();
+    if (str.includes(':')) {
+      const p = str.split(':').map(Number);
+      if (p.some(isNaN)) return null;
+      return p.reduce((a, n) => a * 60 + n, 0);
+    }
+    const n = Number(str);
+    return isNaN(n) ? null : n;
+  }
+  // Format seconds (float) with optional forced hours and 0-3 decimal places.
+  function fmt(total, forceHours, decimals) {
+    total = Math.max(0, total);
+    const whole = Math.floor(total);
+    const h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    let out = (forceHours || h > 0) ? `${forceHours ? pad(h) : h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+    if (decimals > 0) {
+      const fd = Math.floor((total - whole) * Math.pow(10, decimals));
+      out += '.' + String(fd).padStart(decimals, '0');
+    }
+    return out;
+  }
+
+  const layer = () => $('layer').value.trim();
+  const clip  = () => $('clip').value.trim();
+  const isLayerTarget = () => $('targetType').value === 'layer';
+  const baseUrl = () => `http://${$('host').value.trim()}:${$('port').value.trim()}/api/v1`;
+  const targetPath = () => isLayerTarget()
+    ? `/composition/layers/${layer()}`
+    : `/composition/layers/${layer()}/clips/${clip()}`;
+  const identity = () => `${$('targetType').value}/${layer()}/${clip()}`;
+
+  function oscAddress() {
+    const c = textParams[resolvedId];
+    if (!isLayerTarget() && c && c.kind === 'source')
+      return `/composition/layers/${layer()}/clips/${clip()}/video/source/textgenerator/text/params/lines`;
+    return null;
+  }
+  function refreshOsc() {
+    const a = oscAddress();
+    $('oscAddr').value = a || '— use Arena’s OSC Shortcut mode for this target —';
+    $('copyOscBtn').disabled = !a;
+  }
+
+  function setStatus(msg, kind) { $('statusMsg').textContent = msg; $('dot').className = 'dot' + (kind ? ' ' + kind : ''); }
+
+  function populateParams(cands) {
+    textParams = {};
+    const sel = $('param'); sel.innerHTML = '';
+    cands.forEach(c => {
+      textParams[c.id] = c;
+      const o = document.createElement('option'); o.value = c.id; o.textContent = c.label; sel.appendChild(o);
+    });
+    resolvedId = cands.length ? cands[0].id : null;
+    if (cands.length) sel.value = cands[0].id;
+    resolvedKey = identity();
+    refreshOsc();
+  }
+
+  // GET the target and list every ParamText (source params + each effect's params).
+  async function resolve() {
+    try {
+      const r = await fetch(baseUrl() + targetPath());
+      if (!r.ok) { populateParams([]); setStatus(`Target not found (HTTP ${r.status})`, 'bad'); return null; }
+      const d = await r.json();
+      const v = d.video || {};
+      const cands = [];
+      const sp = v.sourceparams || {};
+      Object.keys(sp).forEach(k => {
+        const p = sp[k];
+        if (p && p.valuetype === 'ParamText' && p.id != null) cands.push({ id: p.id, kind: 'source', paramName: k, label: `Source — ${k}` });
+      });
+      (v.effects || []).forEach((e, i) => {
+        const ps = e.params || {};
+        Object.keys(ps).forEach(k => {
+          const p = ps[k];
+          if (p && p.valuetype === 'ParamText' && p.id != null)
+            cands.push({ id: p.id, kind: 'effect', paramName: k, label: `Effect "${e.display_name || e.name || ('#' + (i + 1))}" — ${k}` });
+        });
+      });
+      populateParams(cands);
+      const where = isLayerTarget() ? `L${layer()}` : `L${layer()}C${clip()}`;
+      if (!cands.length) { setStatus(`No text source or effect found on ${where}`, 'bad'); return null; }
+      setStatus(`${where}: found ${cands.length} text param${cands.length > 1 ? 's' : ''}`, 'good');
+      return resolvedId;
+    } catch (e) {
+      populateParams([]); setStatus('Cannot reach Arena (webserver on? host/port?)', 'bad'); return null;
+    }
+  }
+
+  async function send(text) {
+    if (resolvedId == null || resolvedKey !== identity()) { if (await resolve() == null) return; }
+    if (resolvedId == null) return;
+    try {
+      const r = await fetch(`${baseUrl()}/parameter/by-id/${resolvedId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value: text })
+      });
+      if (r.ok) setStatus(`Sent "${text}" → ${textParams[resolvedId] ? textParams[resolvedId].label : 'id ' + resolvedId}`, 'good');
+      else setStatus(`HTTP ${r.status} sending to id ${resolvedId}`, 'bad');
+    } catch (e) { setStatus('Cannot reach Arena (webserver on? host/port?)', 'bad'); }
+  }
+
+  function compute() {
+    const dec = +$('decimals').value, forceH = $('hours').value === 'always', mode = $('mode').value;
+    if (mode === 'clock') {
+      const d = new Date();
+      const total = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000;
+      return { text: fmt(total, true, dec), done: false };   // clock always shows hours
+    }
+    if (mode === 'target') {
+      const [th, tm] = ($('targetTime').value || '0:0').split(':').map(Number);
+      const now = new Date(), tgt = new Date(now);
+      tgt.setHours(th || 0, tm || 0, 0, 0);
+      if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
+      return { text: fmt((tgt - now) / 1000, forceH, dec), done: false };
+    }
+    if (mode === 'countup') return { text: fmt(elapsed, forceH, dec), done: false };
+    const remaining = durationSec - elapsed;
+    if (remaining <= 0) return { text: $('doneText').value, done: true };
+    return { text: fmt(remaining, forceH, dec), done: false };
+  }
+
+  function loop() {
+    const now = performance.now();
+    if (running && !paused) {
+      if (lastTick != null) elapsed += (now - lastTick) / 1000;
+      lastTick = now;
+    } else { lastTick = running ? now : null; }
+
+    const { text, done } = compute();
+    const display = ($('prefix').value || '') + text;
+    $('preview').textContent = text;
+    $('previewMeta').textContent = running ? (paused ? 'paused' : $('mode').value) : 'idle';
+
+    const dec = +$('decimals').value;
+    const minMs = dec >= 2 ? 40 : dec === 1 ? 80 : 0;   // throttle sub-second traffic
+    if (running && !paused && display !== lastSent && (now - lastSendAt) >= minMs) {
+      lastSent = display; lastSendAt = now; send(display);
+    }
+    if (done) { running = false; paused = false; }
+    requestAnimationFrame(loop);
+  }
+
+  function reset() {
+    durationSec = parseDuration($('duration').value) ?? 300;
+    elapsed = 0; lastTick = null; lastSent = null; running = false; paused = false;
+    const { text } = compute();
+    $('preview').textContent = text; $('previewMeta').textContent = 'idle';
+  }
+  function doStart() {
+    durationSec = parseDuration($('duration').value) ?? 300;
+    if (!running) { running = true; paused = false; lastTick = null; } else paused = false;
+  }
+  function doPause() { if (running) paused = !paused; }
+
+  // --- UI wiring ---
+  $('mode').addEventListener('change', () => {
+    const m = $('mode').value;
+    $('durWrap').classList.toggle('hide', !(m === 'countdown' || m === 'countup'));
+    $('targetWrap').classList.toggle('hide', m !== 'target');
+    $('quick').classList.toggle('hide', m !== 'countdown');
+    reset();
+  });
+  $('quick').querySelectorAll('button').forEach(b =>
+    b.addEventListener('click', () => { $('duration').value = fmt(Number(b.dataset.s), false, 0); reset(); }));
+
+  $('targetType').addEventListener('change', () => {
+    $('clipWrap').classList.toggle('hide', isLayerTarget());
+    gateListener();
+    resolvedId = null; resolve();
+    if (ws && ws.readyState === 1) subscribeTarget();
+  });
+  ['layer', 'clip'].forEach(id => $(id).addEventListener('change', () => {
+    resolvedId = null; resolve();
+    if (ws && ws.readyState === 1) subscribeTarget();
+  }));
+  $('param').addEventListener('change', e => { resolvedId = +e.target.value; refreshOsc(); });
+
+  $('startBtn').addEventListener('click', doStart);
+  $('pauseBtn').addEventListener('click', doPause);
+  $('resetBtn').addEventListener('click', reset);
+  $('resolveBtn').addEventListener('click', resolve);
+  $('testBtn').addEventListener('click', () => send(($('prefix').value || '') + 'TEST ' + fmt(72, $('hours').value === 'always', +$('decimals').value)));
+  $('copyOscBtn').addEventListener('click', async () => {
+    const a = oscAddress(); if (!a) return;
+    try { await navigator.clipboard.writeText(a); setStatus('OSC address copied to clipboard', 'good'); }
+    catch (e) { $('oscAddr').select(); setStatus('Copy failed — select the field and copy manually', 'warn'); }
+  });
+  ['hours', 'decimals'].forEach(id => $(id).addEventListener('change', () => { lastSent = null; }));
+
+  // --- Follow the target clip's play state over the WebSocket (clip targets only) ---
+  let ws = null, wantListen = false, reconnectT = null;
+  let subKey = null, lastConn = null;
+
+  const wsUrl = () => `ws://${$('host').value.trim()}:${$('port').value.trim()}/api/v1`;
+  function setTrig(kind, msg) { $('trigMsg').textContent = msg; $('trigDot').className = 'dot' + (kind ? ' ' + kind : ''); }
+
+  function gateListener() {
+    if (isLayerTarget()) {
+      $('listen').disabled = true;
+      if ($('listen').checked) { $('listen').checked = false; wantListen = false; closeWs(); }
+      setTrig('', 'n/a for layer target');
+    } else {
+      $('listen').disabled = false;
+      if (!wantListen) setTrig('', 'off');
+    }
+  }
+
+  function subscribeTarget() {
+    if (!ws || ws.readyState !== 1 || isLayerTarget()) return;
+    subKey = `${layer()}/${clip()}`; lastConn = null;
+    ws.send(JSON.stringify({ action: 'subscribe', parameter: `/composition/layers/${layer()}/clips/${clip()}/connected` }));
+  }
+
+  function onWsMessage(ev) {
+    const data = ev.data;
+    if (typeof data !== 'string' || data.length > 50000) return;   // skip full-state dumps
+    let m; try { m = JSON.parse(data); } catch { return; }
+    if (!m.type || !m.path) return;
+    const mm = m.path.match(/layers\/(\d+)\/clips\/(\d+)\//);
+    if (!mm || `${mm[1]}/${mm[2]}` !== subKey) return;
+    const connected = m.value === 'Connected' || m.value === 'Connected & previewing' || m.index >= 3;
+    const prev = lastConn; lastConn = connected;
+    if (m.type === 'parameter_subscribed') { setTrig('good', connected ? 'listening (clip is playing)' : 'listening'); return; }
+    if (m.type !== 'parameter_update' || connected === prev) return;
+    if (connected) { doStart(); setTrig('good', 'clip connected → start'); }
+    else { reset(); setTrig('good', 'clip disconnected → stop & reset'); }
+  }
+
+  function connectWs() {
+    closeWs();
+    try { ws = new WebSocket(wsUrl()); } catch (e) { setTrig('bad', 'WebSocket failed'); return; }
+    setTrig('warn', 'connecting…');
+    ws.onopen = () => { setTrig('good', 'listening'); subscribeTarget(); };
+    ws.onmessage = onWsMessage;
+    ws.onerror = () => setTrig('bad', 'WebSocket error');
+    ws.onclose = () => { setTrig('warn', 'disconnected'); if (wantListen) reconnectT = setTimeout(connectWs, 1500); };
+  }
+  function closeWs() {
+    if (reconnectT) { clearTimeout(reconnectT); reconnectT = null; }
+    if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} ws = null; }
+  }
+  $('listen').addEventListener('change', e => {
+    wantListen = e.target.checked;
+    if (wantListen) connectWs(); else { closeWs(); setTrig('', 'off'); }
+  });
+
+  refreshOsc();
+  reset();
+  resolve();
+  gateListener();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

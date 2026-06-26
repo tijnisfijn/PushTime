@@ -1,0 +1,19 @@
+<svg viewBox="0 0 1024 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="PushTime — Resolume Timer via REST API">
+  <rect width="1024" height="440" rx="24" fill="#0e0f13"/>
+  <g transform="translate(422 44) scale(1.5)">
+    <!-- stopwatch tick ring -->
+    <circle cx="60" cy="62" r="40" fill="none" stroke="#F2701F" stroke-width="7"
+            stroke-linecap="round" stroke-dasharray="0.5 13" transform="rotate(-6 60 62)"/>
+    <!-- rising chart line -->
+    <path d="M30 84 L50 62 L64 74 L86 46" fill="none" stroke="#F2701F"
+          stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- arrowhead -->
+    <path d="M72 40 L97 31 L90 58 Z" fill="#F2701F"/>
+  </g>
+  <text x="512" y="354" text-anchor="middle" fill="#f5f6f8"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="84" font-weight="700" letter-spacing="-1">PushTime</text>
+  <text x="512" y="398" text-anchor="middle" fill="#8b90a0"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="24" letter-spacing="2">Resolume Timer via REST API</text>
+</svg>
