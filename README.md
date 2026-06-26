@@ -13,6 +13,10 @@
   <img alt="Resolume Arena 7" src="https://img.shields.io/badge/Resolume-Arena%207-F2701F">
 </p>
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="PushTime interface" width="560">
+</p>
+
 ---
 
 ## What it is
