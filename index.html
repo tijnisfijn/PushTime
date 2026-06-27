@@ -99,11 +99,16 @@
           <option value="countup">Count up (elapsed)</option>
           <option value="clock">Time of day</option>
           <option value="target">Countdown to clock time</option>
+          <option value="date">Countdown to date</option>
         </select>
       </div>
       <div class="field grow" id="durWrap">
         <label>Duration (mm:ss or seconds)</label>
         <input id="duration" value="05:00">
+      </div>
+      <div class="field grow hide" id="dateWrap">
+        <label>Target date</label>
+        <input id="targetDate" type="date">
       </div>
       <div class="field grow hide" id="targetWrap">
         <label>Target time (HH:MM)</label>
@@ -128,6 +133,14 @@
           <option value="1">Tenths .t</option>
           <option value="2">Hundredths .cc</option>
           <option value="3">Milliseconds .mmm</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Days</label>
+        <select id="days">
+          <option value="off">Off</option>
+          <option value="compact">5d 03:12:45</option>
+          <option value="worded">5 days</option>
         </select>
       </div>
       <div class="field grow">
@@ -306,24 +319,46 @@
     } catch (e) { setStatus('Cannot reach Arena (webserver on? host/port?)', 'bad'); }
   }
 
+  // Format a duration, optionally splitting out whole days (Nd HH:MM:SS, or worded "N days").
+  function fmtFull(total) {
+    const dec = +$('decimals').value, daysMode = $('days').value;
+    if (daysMode !== 'off') {
+      total = Math.max(0, total);
+      const d = Math.floor(total / 86400);
+      if (daysMode === 'worded') return `${d} ${d === 1 ? 'day' : 'days'}`;
+      return `${d}d ` + fmt(total - d * 86400, true, dec);   // Nd HH:MM:SS
+    }
+    return fmt(total, $('hours').value === 'always', dec);
+  }
+
   function compute() {
-    const dec = +$('decimals').value, forceH = $('hours').value === 'always', mode = $('mode').value;
+    const dec = +$('decimals').value, mode = $('mode').value;
     if (mode === 'clock') {
       const d = new Date();
       const total = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000;
-      return { text: fmt(total, true, dec), done: false };   // clock always shows hours
+      return { text: fmt(total, true, dec), done: false };   // clock always shows hours, never days
     }
-    if (mode === 'target') {
+    if (mode === 'target' || mode === 'date') {
       const [th, tm] = ($('targetTime').value || '0:0').split(':').map(Number);
-      const now = new Date(), tgt = new Date(now);
-      tgt.setHours(th || 0, tm || 0, 0, 0);
-      if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
-      return { text: fmt((tgt - now) / 1000, forceH, dec), done: false };
+      let tgt;
+      if (mode === 'date') {
+        const ds = $('targetDate').value;
+        if (!ds) return { text: '—', done: false };
+        const [Y, M, D] = ds.split('-').map(Number);
+        tgt = new Date(Y, M - 1, D, th || 0, tm || 0, 0, 0);
+      } else {
+        const now = new Date(); tgt = new Date(now);
+        tgt.setHours(th || 0, tm || 0, 0, 0);
+        if (tgt <= now) tgt.setDate(tgt.getDate() + 1);
+      }
+      const remaining = (tgt - new Date()) / 1000;
+      if (remaining <= 0) return { text: $('doneText').value, done: false };
+      return { text: fmtFull(remaining), done: false };
     }
-    if (mode === 'countup') return { text: fmt(elapsed, forceH, dec), done: false };
+    if (mode === 'countup') return { text: fmtFull(elapsed), done: false };
     const remaining = durationSec - elapsed;
     if (remaining <= 0) return { text: $('doneText').value, done: true };
-    return { text: fmt(remaining, forceH, dec), done: false };
+    return { text: fmtFull(remaining), done: false };
   }
 
   function loop() {
@@ -363,7 +398,8 @@
   $('mode').addEventListener('change', () => {
     const m = $('mode').value;
     $('durWrap').classList.toggle('hide', !(m === 'countdown' || m === 'countup'));
-    $('targetWrap').classList.toggle('hide', m !== 'target');
+    $('targetWrap').classList.toggle('hide', !(m === 'target' || m === 'date'));
+    $('dateWrap').classList.toggle('hide', m !== 'date');
     $('quick').classList.toggle('hide', m !== 'countdown');
     reset();
   });
@@ -392,7 +428,7 @@
     try { await navigator.clipboard.writeText(a); setStatus('OSC address copied to clipboard', 'good'); }
     catch (e) { $('oscAddr').select(); setStatus('Copy failed — select the field and copy manually', 'warn'); }
   });
-  ['hours', 'decimals'].forEach(id => $(id).addEventListener('change', () => { lastSent = null; }));
+  ['hours', 'decimals', 'days'].forEach(id => $(id).addEventListener('change', () => { lastSent = null; }));
 
   // --- Follow the target clip's play state over the WebSocket (clip targets only) ---
   let ws = null, wantListen = false, reconnectT = null;
