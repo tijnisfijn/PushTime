@@ -136,14 +136,16 @@
         </select>
       </div>
       <div class="field">
-        <label>Days</label>
+        <label>Style</label>
         <select id="days">
-          <option value="off">Off</option>
-          <option value="compact">Days + time</option>
+          <option value="off">Digital (HH:MM:SS)</option>
+          <option value="compact">Digital + days</option>
           <option value="worded">Days only</option>
+          <option value="words">Words</option>
+          <option value="spelled">Spelled out</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="dayLabelWrap">
         <label>Day label</label>
         <input id="dayLabel" value="d" size="6" placeholder="d">
       </div>
@@ -155,6 +157,12 @@
         <label>Text at zero</label>
         <input id="doneText" value="TIME'S UP">
       </div>
+    </div>
+    <div class="row hide" id="unitsRow" style="margin-top:12px">
+      <div class="field grow"><label>Days word</label><input id="wDay" value="days"></div>
+      <div class="field grow"><label>Hours word</label><input id="wHour" value="hours"></div>
+      <div class="field grow"><label>Minutes word</label><input id="wMin" value="minutes"></div>
+      <div class="field grow"><label>Seconds word</label><input id="wSec" value="seconds"></div>
     </div>
   </div>
 
@@ -323,19 +331,43 @@
     } catch (e) { setStatus('Cannot reach Arena (webserver on? host/port?)', 'bad'); }
   }
 
-  // Format a duration, optionally splitting out whole days with a custom label.
-  // Single-char labels join tight ("35d"); longer ones get a space ("35 days", "35 nights").
-  function fmtFull(total) {
-    const dec = +$('decimals').value, daysMode = $('days').value;
-    if (daysMode !== 'off') {
-      total = Math.max(0, total);
-      const d = Math.floor(total / 86400);
-      const label = $('dayLabel').value;
-      const sep = label.length <= 1 ? '' : ' ';
-      if (daysMode === 'worded') return `${d}${sep}${label}`;
-      return `${d}${sep}${label} ` + fmt(total - d * 86400, true, dec);
+  // English number-to-words, for the spelled-out style.
+  function numWords(n) {
+    n = Math.floor(Math.max(0, n));
+    const ones = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten',
+      'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+    const tens = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+    function u1000(x) {
+      let s = '';
+      if (x >= 100) { s += ones[Math.floor(x / 100)] + ' hundred'; x %= 100; if (x) s += ' '; }
+      if (x >= 20) { s += tens[Math.floor(x / 10)]; if (x % 10) s += '-' + ones[x % 10]; }
+      else if (x > 0) { s += ones[x]; }
+      return s;
     }
-    return fmt(total, $('hours').value === 'always', dec);
+    if (n === 0) return 'zero';
+    let s = '';
+    if (n >= 1000) { s += u1000(Math.floor(n / 1000)) + ' thousand'; n %= 1000; if (n) s += ' '; }
+    return s + u1000(n);
+  }
+
+  // Format a duration in the selected style.
+  function fmtFull(total) {
+    const style = $('days').value, dec = +$('decimals').value;
+    if (style === 'off') return fmt(total, $('hours').value === 'always', dec);
+    total = Math.max(0, total);
+    const d = Math.floor(total / 86400);
+    if (style === 'compact' || style === 'worded') {
+      const label = $('dayLabel').value, sep = label.length <= 1 ? '' : ' ';
+      if (style === 'worded') return `${d}${sep}${label}`;
+      return `${d}${sep}${label} ` + fmt(total - d * 86400, true, dec);   // Nd HH:MM:SS
+    }
+    // words / spelled: drop leading zero units, then read down to seconds
+    const h = Math.floor((total % 86400) / 3600), m = Math.floor((total % 3600) / 60), s = Math.floor(total % 60);
+    const units = [[d, $('wDay').value], [h, $('wHour').value], [m, $('wMin').value], [s, $('wSec').value]];
+    let start = units.findIndex(u => u[0] > 0); if (start < 0) start = 3;
+    const spelled = style === 'spelled', parts = [];
+    for (let i = start; i < units.length; i++) parts.push(`${spelled ? numWords(units[i][0]) : units[i][0]} ${units[i][1]}`);
+    return parts.join(' ');
   }
 
   function compute() {
@@ -409,6 +441,7 @@
     $('dateWrap').classList.toggle('hide', m !== 'date');
     $('quick').classList.toggle('hide', m !== 'countdown');
     if (m === 'date' && $('days').value === 'off') $('days').value = 'compact';  // sensible default for date mode
+    updateStyleFields();
     lastSent = null;
     reset();
   });
@@ -438,7 +471,14 @@
     catch (e) { $('oscAddr').select(); setStatus('Copy failed — select the field and copy manually', 'warn'); }
   });
   ['hours', 'decimals', 'days'].forEach(id => $(id).addEventListener('change', () => { lastSent = null; }));
-  $('dayLabel').addEventListener('input', () => { lastSent = null; });
+  ['dayLabel', 'wDay', 'wHour', 'wMin', 'wSec'].forEach(id => $(id).addEventListener('input', () => { lastSent = null; }));
+
+  function updateStyleFields() {
+    const st = $('days').value;
+    $('dayLabelWrap').classList.toggle('hide', !(st === 'compact' || st === 'worded'));
+    $('unitsRow').classList.toggle('hide', !(st === 'words' || st === 'spelled'));
+  }
+  $('days').addEventListener('change', updateStyleFields);
 
   // --- Follow the target clip's play state over the WebSocket (clip targets only) ---
   let ws = null, wantListen = false, reconnectT = null;
@@ -501,6 +541,7 @@
   reset();
   resolve();
   gateListener();
+  updateStyleFields();
   requestAnimationFrame(loop);
 })();
 </script>
