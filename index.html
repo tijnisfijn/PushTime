@@ -401,6 +401,8 @@
     $('targetWrap').classList.toggle('hide', !(m === 'target' || m === 'date'));
     $('dateWrap').classList.toggle('hide', m !== 'date');
     $('quick').classList.toggle('hide', m !== 'countdown');
+    if (m === 'date' && $('days').value === 'off') $('days').value = 'compact';  // sensible default for date mode
+    lastSent = null;
     reset();
   });
   $('quick').querySelectorAll('button').forEach(b =>
