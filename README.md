@@ -56,9 +56,10 @@ The result: one file, zero dependencies, and a timer that looks like any other t
 ## Features
 
 - **Modes** — countdown, count-up (elapsed), time of day, countdown to a wall-clock time, and countdown to a date.
-- **Formatting** — auto or always-on hours, optional days (`5d 03:12:45` or a plain `5 days`), and optional
-  tenths / hundredths / milliseconds. Sub-second updates are rate-limited so the display stays smooth without
-  flooding Arena.
+- **Formatting** — pick a style: digital (`HH:MM:SS`), with days (`5d 03:12:45`), days only (`5 days`), worded
+  (`4 days 9 hours 44 minutes 14 seconds`), or fully spelled out (`four days nine hours forty-four minutes
+  fourteen seconds`). Unit labels are editable for any language. Plus optional always-on hours and
+  tenths / hundredths / milliseconds, with sub-second updates rate-limited so the display stays smooth.
 - **Any text target** — a Text source on a clip, or a Text Block / Text Animator added as an **effect** on a
   clip or a layer. Resolve scans the target and lists every text parameter it finds; you pick one.
 - **Prefix & end text** — e.g. `STARTS IN ` and `TIME'S UP`.
