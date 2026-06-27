@@ -139,9 +139,13 @@
         <label>Days</label>
         <select id="days">
           <option value="off">Off</option>
-          <option value="compact">5d 03:12:45</option>
-          <option value="worded">5 days</option>
+          <option value="compact">Days + time</option>
+          <option value="worded">Days only</option>
         </select>
+      </div>
+      <div class="field">
+        <label>Day label</label>
+        <input id="dayLabel" value="d" size="6" placeholder="d">
       </div>
       <div class="field grow">
         <label>Prefix (optional)</label>
@@ -319,14 +323,17 @@
     } catch (e) { setStatus('Cannot reach Arena (webserver on? host/port?)', 'bad'); }
   }
 
-  // Format a duration, optionally splitting out whole days (Nd HH:MM:SS, or worded "N days").
+  // Format a duration, optionally splitting out whole days with a custom label.
+  // Single-char labels join tight ("35d"); longer ones get a space ("35 days", "35 nights").
   function fmtFull(total) {
     const dec = +$('decimals').value, daysMode = $('days').value;
     if (daysMode !== 'off') {
       total = Math.max(0, total);
       const d = Math.floor(total / 86400);
-      if (daysMode === 'worded') return `${d} ${d === 1 ? 'day' : 'days'}`;
-      return `${d}d ` + fmt(total - d * 86400, true, dec);   // Nd HH:MM:SS
+      const label = $('dayLabel').value;
+      const sep = label.length <= 1 ? '' : ' ';
+      if (daysMode === 'worded') return `${d}${sep}${label}`;
+      return `${d}${sep}${label} ` + fmt(total - d * 86400, true, dec);
     }
     return fmt(total, $('hours').value === 'always', dec);
   }
@@ -431,6 +438,7 @@
     catch (e) { $('oscAddr').select(); setStatus('Copy failed — select the field and copy manually', 'warn'); }
   });
   ['hours', 'decimals', 'days'].forEach(id => $(id).addEventListener('change', () => { lastSent = null; }));
+  $('dayLabel').addEventListener('input', () => { lastSent = null; });
 
   // --- Follow the target clip's play state over the WebSocket (clip targets only) ---
   let ws = null, wantListen = false, reconnectT = null;
